@@ -24,9 +24,9 @@
       gap:18px;
     }
     @media (max-width: 600px) {
-    .grid {
-      grid-template-columns: repeat(2, 1fr); /* 👈 2 columnas en celulares */
-      gap: 12px;
+      .grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 columnas en celulares */
+        gap: 12px;
       }
     }
     .card{
@@ -57,6 +57,7 @@
       aspect-ratio:1/1;          /* cuadrada en la ficha también */
       object-fit:contain;
       background:#f1f3f5;border-radius:16px;
+      cursor: zoom-in;           /* indica que se puede ampliar */
     }
     .detail h2{margin:0 0 6px 0;text-transform:uppercase}
     .muted{color:var(--muted)}
@@ -68,12 +69,29 @@
     @media (max-width: 860px){
       .detail-card{grid-template-columns:1fr}
     }
+
+    /* ====== MODAL ZOOM SIMPLE ====== */
+    #zoomModal{
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.85);
+      justify-content:center; align-items:center; flex-direction:column;
+      z-index:2000; padding:20px;
+    }
+    #zoomModal img{
+      max-width:90%; max-height:80%;
+      border-radius:10px; object-fit:contain; background:#fff;
+    }
+    #zoomModal button{
+      margin-top:20px; background:#fff; color:#111; border:0;
+      padding:8px 16px; font-size:16px; border-radius:8px; cursor:pointer;
+    }
+    #zoomModal button:hover{ background:#eaeaea }
   </style>
 </head>
 <body>
   <header>
     <h1>CATÁLOGO DE CONTROLES</h1>
-    <div class="sub">Haz clic en una card para abrir un <strong>link único</strong> (vista de una sola imagen). Imágenes cuadradas.</div>
+    <div class="sub">Haz clic en un control para verlo</div>
   </header>
 
   <main>
@@ -87,6 +105,8 @@
         <img id="detailImg" class="detail-img" alt="Control remoto"/>
         <div>
           <h2 id="detailName">LCD 000</h2>
+          <!-- ✅ Mensaje fijo (no se duplica) -->
+          <p id="zoomHint" class="muted" style="margin-top:4px;">Haz clic en la imagen para hacer zoom 🔍</p>
           <div class="row">
             <a id="openLink" style="display:none" class="btn" target="_blank" rel="noopener">Abrir este link</a>
             <button id="shareBtn" class="btn primary">Compartir</button>
@@ -97,6 +117,12 @@
     </section>
   </main>
 
+  <!-- MODAL ZOOM -->
+  <div id="zoomModal" role="dialog" aria-modal="true" aria-label="Zoom de imagen">
+    <img id="zoomImg" src="" alt="Zoom control" />
+    <button id="zoomClose">✖ Cerrar</button>
+  </div>
+
   <script>
     const gridEl   = document.getElementById('grid');
     const detailEl = document.getElementById('detail');
@@ -106,6 +132,11 @@
     const shareBtn = document.getElementById('shareBtn');
     const shared   = document.getElementById('shared');
     const backLink = document.getElementById('backLink');
+
+    // Refs del modal de zoom
+    const zoomModal = document.getElementById('zoomModal');
+    const zoomImg   = document.getElementById('zoomImg');
+    const zoomClose = document.getElementById('zoomClose');
 
     // Lista (incluye variantes alfanuméricas)
     const items = [
@@ -164,6 +195,9 @@
         }
       };
 
+      // 👉 Zoom simple: abrir modal al hacer clic en la imagen
+      dImg.onclick = () => abrirZoom(src);
+
       gridEl.style.display = 'none';
       detailEl.classList.add('visible');
       window.scrollTo({top:0, behavior:'smooth'});
@@ -184,6 +218,19 @@
       const id = getId();
       if(id){ showDetail(id); } else { detailEl.classList.remove('visible'); gridEl.style.display='grid'; }
     });
+
+    /* ====== ZOOM SIMPLE ====== */
+    function abrirZoom(src){
+      zoomImg.src = src;
+      zoomModal.style.display = 'flex';
+    }
+    function cerrarZoom(){
+      zoomModal.style.display = 'none';
+    }
+    // Cerrar con botón, con fondo y con ESC
+    zoomClose.addEventListener('click', cerrarZoom);
+    zoomModal.addEventListener('click', (e)=>{ if(e.target === zoomModal) cerrarZoom(); });
+    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') cerrarZoom(); });
 
     // Init
     renderGrid();
