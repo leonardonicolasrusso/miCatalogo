@@ -25,7 +25,7 @@
     }
     @media (max-width: 600px) {
       .grid {
-        grid-template-columns: repeat(2, 1fr); /* 2 columnas en celulares */
+        grid-template-columns: repeat(2, 1fr);
         gap: 12px;
       }
     }
@@ -36,7 +36,7 @@
     .card:hover{transform:translateY(-3px)}
     .card img{
       width:100%;
-      aspect-ratio:1/1;          /* cuadradas */
+      aspect-ratio:1/1;
       object-fit:contain;
       background:#f1f3f5;
       border-radius:12px;
@@ -54,10 +54,10 @@
     }
     .detail-img{
       width:100%;
-      aspect-ratio:1/1;          /* cuadrada en la ficha también */
+      aspect-ratio:1/1;
       object-fit:contain;
       background:#f1f3f5;border-radius:16px;
-      cursor: zoom-in;           /* indica que se puede ampliar */
+      cursor: zoom-in;
     }
     .detail h2{margin:0 0 6px 0;text-transform:uppercase}
     .muted{color:var(--muted)}
@@ -70,22 +70,20 @@
       .detail-card{grid-template-columns:1fr}
     }
 
-    /* ====== MODAL ZOOM SIMPLE ====== */
+    /* MODAL ZOOM */
     #zoomModal{
       display:none; position:fixed; inset:0;
       background:rgba(0,0,0,.85);
       justify-content:center; align-items:center; flex-direction:column;
       z-index:2000; padding:20px;
     }
-    #zoomModal img{
-      max-width:90%; max-height:80%;
-      border-radius:10px; object-fit:contain; background:#fff;
-    }
-    #zoomModal button{
-      margin-top:20px; background:#fff; color:#111; border:0;
-      padding:8px 16px; font-size:16px; border-radius:8px; cursor:pointer;
-    }
+    #zoomModal img{ max-width:90%; max-height:80%; border-radius:10px; object-fit:contain; background:#fff; }
+    #zoomModal button{ margin-top:20px; background:#fff; color:#111; border:0; padding:8px 16px; font-size:16px; border-radius:8px; cursor:pointer; }
     #zoomModal button:hover{ background:#eaeaea }
+
+    /* Sentinel (infinite scroll) */
+    #sentinel{ height:1px; }
+    .loading-note{ text-align:center; color:var(--muted); font-size:13px; margin-top:10px; }
   </style>
 </head>
 <body>
@@ -97,6 +95,8 @@
   <main>
     <!-- GRID -->
     <section id="grid" class="grid" aria-live="polite"></section>
+    <div id="sentinel" aria-hidden="true"></div>
+    <div id="loadingNote" class="loading-note" style="display:none;">Cargando más…</div>
 
     <!-- DETAIL -->
     <section id="detail" class="detail">
@@ -105,7 +105,6 @@
         <img id="detailImg" class="detail-img" alt="Control remoto"/>
         <div>
           <h2 id="detailName">LCD 000</h2>
-          <!-- ✅ Mensaje fijo (no se duplica) -->
           <p id="zoomHint" class="muted" style="margin-top:4px;">Haz clic en la imagen para hacer zoom 🔍</p>
           <div class="row">
             <a id="openLink" style="display:none" class="btn" target="_blank" rel="noopener">Abrir este link</a>
@@ -126,48 +125,130 @@
   <script>
     const gridEl   = document.getElementById('grid');
     const detailEl = document.getElementById('detail');
-    const dImg = document.getElementById('detailImg');
-    const dName = document.getElementById('detailName');
+    const dImg     = document.getElementById('detailImg');
+    const dName    = document.getElementById('detailName');
     const openLink = document.getElementById('openLink');
     const shareBtn = document.getElementById('shareBtn');
     const shared   = document.getElementById('shared');
     const backLink = document.getElementById('backLink');
 
-    // Refs del modal de zoom
+    // Infinite scroll
+    const sentinel   = document.getElementById('sentinel');
+    const loadingNote= document.getElementById('loadingNote');
+    const PAGE_SIZE  = 40;
+    let page = 0;
+    let loading = false;
+    let observer = null;
+
+    // Modal Zoom
     const zoomModal = document.getElementById('zoomModal');
     const zoomImg   = document.getElementById('zoomImg');
     const zoomClose = document.getElementById('zoomClose');
 
-    // Lista (incluye variantes alfanuméricas)
+    // Items
     const items = [
       132,133,401,403,405,406,407,408,409,410,411,412,415,416,417,418,419,420,421,422,423,424,425,426,427,428,429,430,431,432,433,434,435,436,437,438,439,440,441,442,443,444,445,446,447,"448","448TH",449,450,451,452,453,454,455,456,457,458,459,460,461,462,463,464,465,466,467,"467JV",468,469,470,471,472,473,474,475,476,477,478,479,480,481,482,483,484,485,486,487,488,489,490,491,492,493,494,495,496,497,"498","498TH","498TH2",499,500,501,502,503,504,505,506,507,508,509,510,511,512,513,514,515,516,517,518,519,520,521,522,523,524,525,526,527,528,529,530,531,532,533,534,535,536,537,538,539,540,541,542,543,544,545,546,547,548,549,550,551,552,553,"553P",554,557,558,559,560,561,562,563,564,565,566,567,568,569,570,571,572,573,574,575,576,577,578,579,580,581,582,583,584,585,586,587,588,589,590,591,592,593,594,595,596,597,598,599,600,611,612,613,614,615,616,617,618,619,620,621,622,623,624,625,626,627,628,629,630,631,632,633,634,635,636,638,639,640,641,642,643,644,645,646,649,654,656,657,658
     ];
 
-    function renderGrid() {
-      gridEl.innerHTML = '';
-      items.forEach(id => {
-        const display = `LCD ${id}`;
-        const src = `img/${id}.png`;
-        const card = document.createElement('article');
-        card.className = 'card';
-        card.innerHTML = `
-          <img src="${src}" alt="${display}" loading="lazy">
-          <div class="name">${display}</div>
-        `;
-        card.addEventListener('click', () => openDetail(id));
-        gridEl.appendChild(card);
-      });
+    // Crear card
+    function createCard(id){
+      const display = `LCD ${id}`;
+      const src = `img/${id}.png`;
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.innerHTML = `
+        <img src="${src}" alt="${display}" loading="lazy">
+        <div class="name">${display}</div>
+      `;
+      card.addEventListener('click', () => openDetail(id));
+      return card;
     }
 
-    // Navegar a ?id=...
+    // Agregar lote
+    function appendBatch(){
+      if (loading) return;
+      loading = true;
+      loadingNote.style.display = 'block';
+
+      const start = page * PAGE_SIZE;
+      const end   = Math.min(start + PAGE_SIZE, items.length);
+
+      if (start >= items.length) {
+        loadingNote.style.display = 'none';
+        disconnectObserver();
+        loading = false;
+        return;
+      }
+
+      for(let i = start; i < end; i++){
+        gridEl.appendChild(createCard(items[i]));
+      }
+      page++;
+
+      loading = false;
+      loadingNote.style.display = 'none';
+
+      if (page * PAGE_SIZE >= items.length){
+        disconnectObserver();
+      }
+
+      // 👇 Asegura que en pantallas grandes se llene sin necesidad de scroll extra
+      fillViewportIfNeeded();
+    }
+
+    // Rellenar viewport si aún no alcanza la altura de la ventana
+    function fillViewportIfNeeded(){
+      if (detailEl.classList.contains('visible')) return; // no rellenar en ficha
+      // Si el contenido total es menor que la ventana, agrego más
+      if (document.documentElement.scrollHeight <= window.innerHeight + 50) {
+        // Evito bloqueo: dejo a la UI renderizar y llamo otro appendBatch
+        requestAnimationFrame(()=> appendBatch());
+      }
+    }
+
+    function disconnectObserver(){
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+    }
+
+    // Observer
+    function setupObserver(){
+      disconnectObserver();
+
+      observer = new IntersectionObserver((entries)=>{
+        const entry = entries[0];
+        if (entry.isIntersecting && !detailEl.classList.contains('visible')){
+          appendBatch();
+        }
+      }, { root: null, rootMargin: '800px 0px', threshold: 0 });
+
+      observer.observe(sentinel);
+    }
+
+    // Render inicial
+    function renderGridInitial(){
+      gridEl.innerHTML = '';
+      page = 0;
+      loading = false;
+      appendBatch(); // 1er lote
+      appendBatch(); // 2do lote para arrancar más lleno
+      setupObserver();
+      // Y por si la pantalla es muy alta, relleno
+      fillViewportIfNeeded();
+    }
+
+    // Navegar a ?id=
     function openDetail(id){
       const url = new URL(location.href);
       url.searchParams.set('id', id);
       history.pushState({}, '', url);
+      disconnectObserver(); // pausar mientras vemos la ficha
       showDetail(id);
     }
 
-    // Mostrar ficha individual
+    // Ficha
     function showDetail(id){
       const src = `img/${id}.png`;
       const name = `LCD ${id}`;
@@ -177,7 +258,6 @@
       const link = `${location.origin}${location.pathname}?id=${encodeURIComponent(id)}`;
       openLink.href = link;
 
-      // Compartir nativo con fallback a copiar link
       shareBtn.onclick = async () => {
         const shareData = { title: 'Catálogo de Controles', text: `Mirá este control: ${name}`, url: link };
         try {
@@ -195,7 +275,6 @@
         }
       };
 
-      // 👉 Zoom simple: abrir modal al hacer clic en la imagen
       dImg.onclick = () => abrirZoom(src);
 
       gridEl.style.display = 'none';
@@ -203,7 +282,7 @@
       window.scrollTo({top:0, behavior:'smooth'});
     }
 
-    // Volver al catálogo (quita ?id)
+    // Volver
     backLink.addEventListener('click', (e)=>{
       e.preventDefault();
       const url = new URL(location.href);
@@ -211,29 +290,38 @@
       history.pushState({}, '', url);
       detailEl.classList.remove('visible');
       gridEl.style.display = 'grid';
+      setupObserver();           // reactivar observer
+      fillViewportIfNeeded();    // por si la pantalla es muy alta
     });
 
     function getId(){ return new URL(location.href).searchParams.get('id'); }
     window.addEventListener('popstate', ()=>{
       const id = getId();
-      if(id){ showDetail(id); } else { detailEl.classList.remove('visible'); gridEl.style.display='grid'; }
+      if(id){ showDetail(id); }
+      else {
+        detailEl.classList.remove('visible');
+        gridEl.style.display='grid';
+        setupObserver();
+        fillViewportIfNeeded();
+      }
     });
 
-    /* ====== ZOOM SIMPLE ====== */
-    function abrirZoom(src){
-      zoomImg.src = src;
-      zoomModal.style.display = 'flex';
-    }
-    function cerrarZoom(){
-      zoomModal.style.display = 'none';
-    }
-    // Cerrar con botón, con fondo y con ESC
+    // También rellenar si el usuario redimensiona la ventana (desktop)
+    window.addEventListener('resize', ()=>{
+      if (!detailEl.classList.contains('visible')) {
+        fillViewportIfNeeded();
+      }
+    });
+
+    /* ZOOM SIMPLE */
+    function abrirZoom(src){ zoomImg.src = src; zoomModal.style.display = 'flex'; }
+    function cerrarZoom(){ zoomModal.style.display = 'none'; }
     zoomClose.addEventListener('click', cerrarZoom);
     zoomModal.addEventListener('click', (e)=>{ if(e.target === zoomModal) cerrarZoom(); });
     window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') cerrarZoom(); });
 
     // Init
-    renderGrid();
+    renderGridInitial();
     const startId = getId();
     if(startId){ showDetail(startId); }
   </script>
