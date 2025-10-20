@@ -192,16 +192,12 @@
         disconnectObserver();
       }
 
-      // 👇 Asegura que en pantallas grandes se llene sin necesidad de scroll extra
       fillViewportIfNeeded();
     }
 
-    // Rellenar viewport si aún no alcanza la altura de la ventana
     function fillViewportIfNeeded(){
-      if (detailEl.classList.contains('visible')) return; // no rellenar en ficha
-      // Si el contenido total es menor que la ventana, agrego más
+      if (detailEl.classList.contains('visible')) return;
       if (document.documentElement.scrollHeight <= window.innerHeight + 50) {
-        // Evito bloqueo: dejo a la UI renderizar y llamo otro appendBatch
         requestAnimationFrame(()=> appendBatch());
       }
     }
@@ -213,7 +209,6 @@
       }
     }
 
-    // Observer
     function setupObserver(){
       disconnectObserver();
 
@@ -227,15 +222,13 @@
       observer.observe(sentinel);
     }
 
-    // Render inicial
     function renderGridInitial(){
       gridEl.innerHTML = '';
       page = 0;
       loading = false;
-      appendBatch(); // 1er lote
-      appendBatch(); // 2do lote para arrancar más lleno
+      appendBatch();
+      appendBatch();
       setupObserver();
-      // Y por si la pantalla es muy alta, relleno
       fillViewportIfNeeded();
     }
 
@@ -250,23 +243,31 @@
 
     // Ficha
     function showDetail(id){
-      const src = `img/${id}.png`;
+      const src  = `img/${id}.png`;
       const name = `LCD ${id}`;
       dImg.src = src; dImg.alt = name;
       dName.textContent = name;
 
-      const link = `${location.origin}${location.pathname}?id=${encodeURIComponent(id)}`;
-      openLink.href = link;
+      // URL ABSOLUTA a la imagen (para compartir con preview)
+      const imgUrl = new URL(src, location.href).href;
 
+      // (opcional) si querés conservar el link oculto:
+      openLink.href = imgUrl;
+
+      // Compartir imagen directa (mejor preview en WhatsApp)
       shareBtn.onclick = async () => {
-        const shareData = { title: 'Catálogo de Controles', text: `Mirá este control: ${name}`, url: link };
+        const shareData = {
+          title: name,
+          text: `Mirá este control: ${name}`,
+          url: imgUrl
+        };
         try {
           if (navigator.share) {
             await navigator.share(shareData);
             shared.textContent = '✅ Compartido';
           } else {
-            await navigator.clipboard.writeText(link);
-            shared.textContent = '🔗 Link copiado (compartí manualmente)';
+            await navigator.clipboard.writeText(imgUrl);
+            shared.textContent = '🔗 Link de la imagen copiado';
           }
           shared.style.display = 'inline';
           setTimeout(()=> shared.style.display='none', 2000);
@@ -290,8 +291,8 @@
       history.pushState({}, '', url);
       detailEl.classList.remove('visible');
       gridEl.style.display = 'grid';
-      setupObserver();           // reactivar observer
-      fillViewportIfNeeded();    // por si la pantalla es muy alta
+      setupObserver();
+      fillViewportIfNeeded();
     });
 
     function getId(){ return new URL(location.href).searchParams.get('id'); }
@@ -306,7 +307,6 @@
       }
     });
 
-    // También rellenar si el usuario redimensiona la ventana (desktop)
     window.addEventListener('resize', ()=>{
       if (!detailEl.classList.contains('visible')) {
         fillViewportIfNeeded();
